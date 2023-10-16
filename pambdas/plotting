@@ -1,0 +1,611 @@
+# Transforms plotly express style function call to traces that can be used by plotly js module
+# Aim: To easily produce plots in Brython. 
+# Brython cannot import standard python plotting libraries or pandas. Solution: Create pure python version of some of Pandas features and add a plotting module that uses python, but behind the scenes converts the arguments and uses a js library to create the plots
+# The plotting library stands on its own, but can also be integrated with the pyure python pandas dataframes/series
+
+from browser import window, document
+
+
+# JavaScript code to set up Mutation Observer
+js_code = 'const observer = new MutationObserver(function(mutations) {mutations.forEach(function(mutation) {for (const node of mutation.addedNodes) {if (node.id && node.id.startsWith("pyplotDiv_")) {const traceSpec = window[node.id + "_data"];const layoutSpec = window[node.id + "_layout"];Plotly.newPlot(node.id, traceSpec, layoutSpec);}}});});observer.observe(document.body, {childList: true, subtree: true});'
+
+# Execute the JS code
+window.eval(js_code)
+
+def str2num(string_list):
+    unique_strings = list(set(string_list))
+    string_to_number_map = {string: i for i, string in enumerate(unique_strings)}
+    return [string_to_number_map[s] for s in string_list]
+
+def remove_none(d):
+    return {k: v for k, v in d.items() if v is not None}
+
+def to_plotly(traces, layout=None, config=None, show=False):
+    print("trace",traces, layout)
+    # Create a unique ID for the div
+    div_id = "pyplotDiv_" + str(window.performance.now()).replace(".", "")
+    
+    # Create the div
+    new_div = document.createElement('div')
+    new_div.id = div_id
+    
+    # Store the data and layout in global variables for later use by the Mutation Observer
+    window[div_id + "_data"] = traces
+    window[div_id + "_layout"] = layout
+
+    if show:
+        # Add to the DOM and render immediately
+        document.body.appendChild(new_div)
+        window.Plotly.newPlot(div_id, traces, layout)
+
+    # Return the div so it can be added to the DOM later
+    return new_div
+
+def generate_traces(data, chart_type, x, y, color, text, hover_name, hover_data, title, height, width):
+    traces = []
+    layout = {}
+    
+    x_data = data.get(x)
+    y_data = data.get(y)
+    color_data = data.get(color)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    if color_data is None or isinstance(color_data, str):
+        trace = remove_none({
+            "type": chart_type,
+            "x": x_data,
+            "y": y_data,
+            "marker": {"color": color_data} if color_data else None,
+            "text": text_data,
+            "hoverinfo": "name" if hover_name_data else None,
+            "customdata": hover_data_dict
+        })
+        traces.append(trace)
+    else:
+        color_categories = list(set(color_data))
+        for color in color_categories:
+            filtered_indices = [i for i, c in enumerate(color_data) if c == color]
+            filtered_x = [x_data[i] for i in filtered_indices]
+            filtered_y = [y_data[i] for i in filtered_indices]
+            filtered_text = [text_data[i] for i in filtered_indices] if text_data else None
+            filtered_hover_name = [hover_name_data[i] for i in filtered_indices] if hover_name_data else None
+            filtered_hover_data = {k: [v[i] for i in filtered_indices] for k, v in hover_data_dict.items()} if hover_data_dict else None
+
+            trace = remove_none({
+                "type": chart_type,
+                "x": filtered_x,
+                "y": filtered_y,
+                "name": str(color),
+                "marker": {"color": color},
+                "text": filtered_text,
+                "hoverinfo": "name" if filtered_hover_name else None,
+                "customdata": filtered_hover_data
+            })
+            traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width
+    })
+
+    return traces, layout
+
+
+
+def area(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+         title=None, height=None, width=None, show=False):
+
+    traces = []
+    layout = {}
+    
+    x_data = data.get(x)
+
+    if isinstance(y, list):
+        for y_col in y:
+            y_data = data.get(y_col)
+            trace = remove_none({
+                "type": "scatter",
+                "mode": "lines+markers",
+                "stackgroup": "one",  # this line is the key to stacking
+                "x": x_data,
+                "y": y_data,
+                "name": y_col,
+                "text": data.get(text),
+                "hoverinfo": "name" if hover_name else None,
+                "customdata": {k: data.get(k) for k in hover_data or []}
+            })
+            traces.append(trace)
+    else:
+        y_data = data.get(y)
+        trace = remove_none({
+            "type": "scatter",
+            "mode": "lines+markers",
+            "x": x_data,
+            "y": y_data,
+            "marker": {"color": color} if color else None,
+            "text": data.get(text),
+            "hoverinfo": "name" if hover_name else None,
+            "customdata": {k: data.get(k) for k in hover_data or []}
+        })
+        traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width
+    })
+
+    # The function 'to_plotly' could be your implementation to convert these traces and layout to actual Plotly.js plot
+    div = to_plotly(traces, layout, show=show)  
+
+    return div
+
+
+
+def bar(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+        title=None, height=None, width=None, barmode=None, show=False):
+    
+    traces = []
+    layout = {}
+
+    x_data = data.get(x)
+    y_data = data.get(y)
+    color_data = data.get(color)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    if color_data is None or isinstance(color_data, str):
+        trace = remove_none({
+            "type": "bar",
+            "x": x_data,
+            "y": y_data,
+            "marker": {"color": color_data} if color_data else None,
+            "text": text_data,
+            "hoverinfo": "name" if hover_name_data else None,
+            "customdata": hover_data_dict
+        })
+        traces.append(trace)
+    else:
+        color_categories = list(set(color_data))
+        for color in color_categories:
+            filtered_indices = [i for i, c in enumerate(color_data) if c == color]
+            filtered_x = [x_data[i] for i in filtered_indices]
+            filtered_y = [y_data[i] for i in filtered_indices]
+            filtered_text = [text_data[i] for i in filtered_indices] if text_data else None
+            filtered_hover_name = [hover_name_data[i] for i in filtered_indices] if hover_name_data else None
+            filtered_hover_data = {k: [v[i] for i in filtered_indices] for k, v in hover_data_dict.items()} if hover_data_dict else None
+
+            trace = remove_none({
+                "type": "bar",
+                "x": filtered_x,
+                "y": filtered_y,
+                "name": str(color),
+                "text": filtered_text,
+                "hoverinfo": "name" if filtered_hover_name else None,
+                "customdata": filtered_hover_data
+            })
+            traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width,
+        "barmode": barmode
+    })
+    div=to_plotly(traces, layout, show=show)
+    return div
+    
+def box(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+        title=None, height=None, width=None, show=False):
+    
+    traces, layout = generate_traces(
+        data, "box", x, y, color, text, hover_name, hover_data, title, height, width)
+    div=to_plotly(traces, layout, show=show)
+    return div
+    
+def remove_none(d):
+    """Remove keys where the value is None."""
+    return {key: value for key, value in d.items() if value is not None}
+
+def choropleth(data, lat=None, lon=None, locations=None, locationmode='country names', 
+               geojson=None, featureidkey="id", color=None, 
+               title='Choropleth Map', labels=None, 
+               color_continuous_scale='Viridis', range_color=None, 
+               projection='mercator', scope='world', center=None, 
+               fitbounds=None, basemap_visible=True, width=800, height=600, show=False):
+    
+    traces = []
+    
+    locations_data = list(data.get(locations, []))
+    lat_data = list(data.get(lat, []))
+    lon_data = list(data.get(lon, []))
+    color_data = list(data.get(color, []))
+
+    trace = remove_none({
+        "type": "choropleth",
+        "lat": lat_data if lat_data else None,
+        "lon": lon_data if lon_data else None,
+        "locations": locations_data if locations_data else None,
+        "locationmode": locationmode,
+        "geojson": geojson,
+        "featureidkey": featureidkey,
+        "z": color_data if color_data else None,
+        "colorscale": color_continuous_scale,
+        "zmin": range_color[0] if range_color else None,
+        "zmax": range_color[1] if range_color else None,
+        "name": labels if isinstance(labels, str) else None
+    })
+
+    traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "width": width,
+        "height": height,
+        "geo": remove_none({
+            "scope": scope,
+            "projection": {"type": projection} if projection else None,
+            "center": center,
+            "fitbounds": fitbounds,
+            "showland": basemap_visible
+        })
+    })
+    
+    div = to_plotly(traces, layout, show=show)
+    return div
+
+
+
+
+
+def histogram(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+        title=None, height=None, width=None, show=False):
+    
+    traces = []
+    layout = {}
+
+    x_data = data.get(x)
+    y_data = data.get(y) if y else None  # Make sure to handle y=None case
+    color_data = data.get(color)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    trace = remove_none({
+        "type": "histogram",
+        "x": x_data,
+        "y": y_data,  # This will be None unless y is specified
+        "marker": {"color": color_data} if color_data else None,
+        "text": text_data,
+        "hoverinfo": "name" if hover_name_data else None,
+        "customdata": hover_data_dict
+    })
+
+    traces.append(trace)
+
+    print("histogram trace", traces)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width
+    })
+
+    div=to_plotly(traces, layout, show=show)
+    return div
+
+def to_camel_case(snake_str):
+    components = snake_str.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+
+
+def clean_dict(d):
+    return {k: clean_dict(v) if isinstance(v, dict) else v for k, v in d.items() if v is not None}
+
+def to_camel(snake_str):
+    components = snake_str.split('_')
+    return components[0] + ''.join(x.title() for x in components[1:])
+    
+def to_camel_case(d):
+    if not isinstance(d, dict):
+        return d
+    return {to_camel(k): to_camel_case(v) for k, v in d.items() if v is not None}
+
+    
+def indicator(mode='number', value=None, 
+              number_value_format=None, number_prefix=None, number_suffix=None,
+              number_font_size=None, number_font_family=None, number_font_color=None, 
+              delta_reference=None, delta_value_format=None, delta_relative=None, 
+              delta_increasing_color=None, delta_decreasing_color=None, 
+              gauge_axis_range=None, gauge_bar_thickness=None, gauge_bar_color=None, 
+              gauge_shape="angular", gauge_background_color=None, 
+              gauge_border_color=None, gauge_border_width=None, 
+              gauge_axis_show_ticklabels=None, gauge_axis_tickmode=None, 
+              gauge_axis_tickvals=None, gauge_axis_ticktext=None, gauge_steps=None, 
+              gauge_threshold_value=None, domain_x=None, domain_y=None, 
+              title=None, title_font_size=None, title_font_family=None, 
+              title_font_color=None, title_align=None, margin_left=None, 
+              margin_right=None, margin_top=None, margin_bottom=None, 
+              layout_title=None, width=None, height=None, 
+              paper_background_color=None, plot_background_color=None, 
+              font_family=None, font_size=None, show=False):
+
+    number = to_camel_case({
+        'valueFormat': number_value_format, 'prefix': number_prefix, 'suffix': number_suffix,
+        'font': {'size': number_font_size, 'family': number_font_family, 'color': number_font_color}
+    })
+
+    delta = to_camel_case({
+        'reference': delta_reference, 'valueFormat': delta_value_format, 'relative': delta_relative,
+        'increasing': {'color': delta_increasing_color}, 'decreasing': {'color': delta_decreasing_color}
+    })
+
+    gauge = to_camel_case({
+        'shape': gauge_shape, 'axis': {'range': gauge_axis_range},
+        'bar': {'thickness': gauge_bar_thickness, 'color': gauge_bar_color},
+        'backgroundColor': gauge_background_color, 'borderColor': gauge_border_color,
+        'borderWidth': gauge_border_width,
+        'axis': {
+            'showticklabels': gauge_axis_show_ticklabels, 'tickmode': gauge_axis_tickmode,
+            'tickvals': gauge_axis_tickvals, 'ticktext': gauge_axis_ticktext
+        },
+        'steps': gauge_steps, 'threshold': {'value': gauge_threshold_value}
+    })
+
+    title_dict = to_camel_case({
+        'text': title, 'font': {'size': title_font_size, 'family': title_font_family, 'color': title_font_color},
+        'align': title_align
+    })
+
+    margin = to_camel_case({
+        'l': margin_left, 'r': margin_right, 't': margin_top, 'b': margin_bottom
+    })
+
+    trace = {
+        'type': 'indicator', 'mode': mode, 'value': value,
+        'number': number, 'delta': delta, 'gauge': gauge,
+        'domain': {'x': domain_x, 'y': domain_y},
+        'title': title_dict
+    }
+
+    layout = {
+        'title': layout_title, 'margin': margin, 'width': width, 'height': height,
+        'paper_bgcolor': paper_background_color, 'plot_bgcolor': plot_background_color,
+        'font': {'family': font_family, 'size': font_size}
+    }
+
+    trace = {k: v for k, v in trace.items() if v is not None}
+    layout = {k: v for k, v in layout.items() if v is not None}
+
+    div = to_plotly([trace], layout, show=show)
+    return div
+
+
+
+def indicator_js(mode=None, value=None, number=None, delta=None, gauge=None, 
+    domain_x=None, domain_y=None, title=None,
+    margin=None, layout_title=None, width=None, height=None, show=False):
+
+    # Convert Pythonic 'underscore_case' to JavaScript 'camelCase'
+    number = to_camel_case(number)
+    delta = to_camel_case(delta)
+    gauge = to_camel_case(gauge)
+    domain_x = to_camel_case(domain_x)
+    domain_y = to_camel_case(domain_y)
+    title = to_camel_case(title)
+    margin = to_camel_case(margin)
+
+    # Create the trace
+    trace = {
+        'type': 'indicator',
+        'mode': mode,
+        'value': value,
+        'number': number,
+        'delta': delta,
+        'gauge': gauge,
+        'domain': {'x': domain_x, 'y': domain_y},
+        'title': title
+    }
+
+    # Create the layout
+    layout = {
+        'title': layout_title,
+        'margin': margin,
+        'width': width,
+        'height': height
+    }
+    
+    # Remove None values from trace and layout
+    trace = {k: v for k, v in trace.items() if v is not None}
+    layout = {k: v for k, v in layout.items() if v is not None}
+
+    div=to_plotly([trace], layout, show=show)
+    return div
+
+
+
+def line(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+         title=None, height=None, width=None, line_shape=None, show=False):
+    
+    traces = []
+    layout = {}
+
+    x_data = data.get(x)
+    y_data = data.get(y)
+    color_data = data.get(color)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    if color_data is None or isinstance(color_data, str):
+        trace = remove_none({
+            "type": "scatter",
+            "mode": "lines",
+            "x": x_data,
+            "y": y_data,
+            "line": {"color": color_data, "shape": line_shape} if color_data else None,
+            "text": text_data,
+            "hoverinfo": "name" if hover_name_data else None,
+            "customdata": hover_data_dict
+        })
+        traces.append(trace)
+    else:
+        color_categories = list(set(color_data))
+        for color in color_categories:
+            filtered_indices = [i for i, c in enumerate(color_data) if c == color]
+            filtered_x = [x_data[i] for i in filtered_indices]
+            filtered_y = [y_data[i] for i in filtered_indices]
+            filtered_text = [text_data[i] for i in filtered_indices] if text_data else None
+            filtered_hover_name = [hover_name_data[i] for i in filtered_indices] if hover_name_data else None
+            filtered_hover_data = {k: [v[i] for i in filtered_indices] for k, v in hover_data_dict.items()} if hover_data_dict else None
+
+            trace = remove_none({
+                "type": "scatter",
+                "mode": "lines",
+                "x": filtered_x,
+                "y": filtered_y,
+                "name": str(color),
+                "line": {"shape": line_shape},
+                "text": filtered_text,
+                "hoverinfo": "name" if filtered_hover_name else None,
+                "customdata": filtered_hover_data
+            })
+            traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width
+    })
+    
+    div=to_plotly(traces, layout, show=show)
+    return div
+    
+def scatter(data, x=None, y=None, color=None, size=None,
+                                   text=None, hover_name=None, hover_data=None,
+                                   title=None, height=None, width=None, marker_symbol=None, show=False):
+    
+    traces = []
+    layout = {}
+    
+    x_data = data.get(x)
+    y_data = data.get(y)
+    color_data = data.get(color)
+    size_data = data.get(size)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    def remove_none(d):
+        return {k: v for k, v in d.items() if v is not None}
+
+    if color_data is None or isinstance(color_data, str):
+        trace = remove_none({
+            "type": "scatter",
+            "mode": "markers",
+            "x": x_data,
+            "y": y_data,
+            "marker": {
+                "color": color_data if color_data else None,
+                "size": size_data if size_data else None,
+                "symbol": marker_symbol if marker_symbol else None
+            },
+            "text": text_data,
+            "hoverinfo": "name" if hover_name_data else None,
+            "customdata": hover_data_dict
+        })
+        traces.append(trace)
+    else:
+        color_categories = list(set(color_data))
+        for color in color_categories:
+            filtered_indices = [i for i, c in enumerate(color_data) if c == color]
+            filtered_x = [x_data[i] for i in filtered_indices]
+            filtered_y = [y_data[i] for i in filtered_indices]
+            filtered_size = [size_data[i] for i in filtered_indices] if size_data else None
+            filtered_text = [text_data[i] for i in filtered_indices] if text_data else None
+            filtered_hover_name = [hover_name_data[i] for i in filtered_indices] if hover_name_data else None
+            filtered_hover_data = {k: [v[i] for i in filtered_indices] for k, v in hover_data_dict.items()} if hover_data_dict else None
+
+            trace = remove_none({
+                "type": "scatter",
+                "mode": "markers",
+                "x": filtered_x,
+                "y": filtered_y,
+                "name": str(color),
+                "marker": {
+                    "size": filtered_size,
+                    "symbol": marker_symbol if marker_symbol else None
+                },
+                "text": filtered_text,
+                "hoverinfo": "name" if filtered_hover_name else None,
+                "customdata": filtered_hover_data
+            })
+            traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width,
+    })
+    div=to_plotly(traces, layout, show=show)
+    return div
+    
+
+def violin(data, x=None, y=None, color=None, text=None, hover_name=None, hover_data=None,
+           title=None, height=None, width=None, show=False):
+    
+    traces = []
+    layout = {}
+    
+    x_data = data.get(x)
+    y_data = data.get(y)
+    color_data = data.get(color)
+    text_data = data.get(text)
+    hover_name_data = data.get(hover_name)
+    hover_data_dict = {k: data.get(k) for k in hover_data or []}
+
+    if color_data is None or isinstance(color_data, str):
+        trace = remove_none({
+            "type": "violin",
+            "x": x_data,
+            "y": y_data,
+            "marker": {"color": color_data} if color_data else None,
+            "text": text_data,
+            "hoverinfo": "name" if hover_name_data else None,
+            "customdata": hover_data_dict
+        })
+        traces.append(trace)
+    else:
+        color_categories = list(set(color_data))
+        for color in color_categories:
+            filtered_indices = [i for i, c in enumerate(color_data) if c == color]
+            filtered_x = [x_data[i] for i in filtered_indices]
+            filtered_y = [y_data[i] for i in filtered_indices]
+            filtered_text = [text_data[i] for i in filtered_indices] if text_data else None
+            filtered_hover_name = [hover_name_data[i] for i in filtered_indices] if hover_name_data else None
+            filtered_hover_data = {k: [v[i] for i in filtered_indices] for k, v in hover_data_dict.items()} if hover_data_dict else None
+
+            trace = remove_none({
+                "type": "violin",
+                "x": filtered_x,
+                "y": filtered_y,
+                "name": str(color),
+                "marker": {"color": color},
+                "text": filtered_text,
+                "hoverinfo": "name" if filtered_hover_name else None,
+                "customdata": filtered_hover_data
+            })
+            traces.append(trace)
+
+    layout = remove_none({
+        "title": title,
+        "height": height,
+        "width": width,
+    })
+    
+    div=to_plotly(traces, layout, show=show)
+    return div

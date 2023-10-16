@@ -5,6 +5,7 @@ from datetime import datetime
 from .indexers import LocSer, ILocSer
 from .other_stuff import nan, is_bool
 import functools
+from collections import Counter
 
 
 class Series:
@@ -52,6 +53,7 @@ class Series:
         self.loc = LocSer(self)
         self.str = STR(self)
         self.dt = DT(self)
+        self.plot = Plot(self)
 
     def __setitem__(self, key, value):
         self.loc.__setitem__(key, value)
@@ -63,8 +65,8 @@ class Series:
         return (
             "Series Name: "
             + str(self.name)
-            + "\n"
-            + "\n".join(
+            + os.linesep
+            + os.linesep.join(
                 "%s: %s" % (item[0], item[1])
                 for item in zip(self.index, self.data[self.view])
             )
@@ -400,6 +402,26 @@ class Series:
             res += item
         return res
 
+    def value_counts(self, dropna=True):
+      if dropna:
+        values = self.dropna().values
+      else:
+        values=self.values
+      counted=Counter(values)
+      index=list(counted.keys())
+      values=list(counted.values())
+      return Series(values, index=index)
+    
+    def to_dict(self):
+      #columns=list(self.columns)
+      #dikt = {columns[n]: data for n, data in enumerate(zip(*self.values))}
+      #to do, naming
+      dikt={}
+      dikt["index"]=self.index
+      dikt["values"]=self.values
+      return dikt
+    
+
 
 class STR:
     def __init__(self, obj):
@@ -417,3 +439,4 @@ class DT:
     def __getattr__(self, item):
         # must return a partialed apply, which can accept args
         return functools.partial(self.obj.apply, func=getattr(datetime, item))
+

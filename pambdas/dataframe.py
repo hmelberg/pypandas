@@ -1,3 +1,17 @@
+from functools import reduce
+from copy import copy
+import itertools
+import csv
+import functools
+import os
+from datetime import datetime
+import functools
+from collections import Counter
+try:
+  import plotly_express as px
+except:
+  pass
+
 class DataFrame:
     """
     The only mutable attribute is the data.

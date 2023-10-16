@@ -1,14 +1,3 @@
-"""
-Contains the DataFrame class
-"""
-import itertools
-import csv
-import functools
-from .series import Series
-from .indexers import ILocDF, LocDF
-from .other_stuff import nan, is_bool, is_2d_bool
-
-
 class DataFrame:
     """
     The only mutable attribute is the data.
@@ -34,6 +23,7 @@ class DataFrame:
         self.view = (slice(0, 0), slice(0, 0))  # type: tuple
         self.iloc = ILocDF(self)  # type: ILocDF
         self.loc = LocDF(self)  # type: LocDF
+        self.plot = Plot(self)
 
         if data is None:
             return
@@ -96,8 +86,8 @@ class DataFrame:
         return Series.from_data(*args)
 
     def __str__(self):
-        string = "DataFrame: " + "\n" + str(self.columns) + "\n"
-        string += "\n".join(str(d) for d in zip(self.index, self.values))
+        string = "DataFrame: " + os.linesep + str(self.columns) + os.linesep
+        string += os.linesep.join(str(d) for d in zip(self.index, self.values))
         return string
 
     def __getitem__(self, cols):
@@ -107,6 +97,13 @@ class DataFrame:
         elif isinstance(cols, slice) or is_bool(cols) or is_2d_bool(cols):
             return self.loc[cols, :]
         return self.loc[:, cols]
+    
+    def __getattr__(self, name):
+        if name in self.columns:
+            return self[name]
+        else:
+            raise AttributeError(f"'MyDataFrame' object has no attribute '{name}'")
+
 
     def __setitem__(self, key, value):
         """
@@ -601,6 +598,96 @@ class DataFrame:
                 res += item[1]
         res.name = self.name
         return res
+    def to_dict(self):
+      columns=list(self.columns)
+      dikt = {columns[n]: data for n, data in enumerate(zip(*self.values))}
+      return dikt
+    def scatter(self, x, y, **kwargs):
+        data=self.to_dict()
+        px.scatter(data=data, x=x, y=y,**kwargs)
+    def bar(self, x, y, **kwargs):
+        data=self.to_dict()
+        px.bar(data=data, x=x, y=y,**kwargs)
+    def line(self, x, y, **kwargs):
+        data=self.to_dict()
+        px.line(data=data, x=x, y=y,**kwargs)
+    
+
+class Plot:
+    def __init__(self, data):
+        self.data = data
+    def area(self,x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.area(data=data, x=x, y=y, **kwargs)
+    def bar(self,x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+
+        return px.bar(data=data, x=x, y=y, **kwargs)
+    def choropleth(self, **kwargs):
+        data= self.data.to_dict()
+        return px.choropleth(data=data, **kwargs)
+    def map(self, **kwargs):
+        data= self.data.to_dict()
+        return px.choropleth(data=data, **kwargs)
+    def box(self,x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.box(data=data, x=x, y=y, **kwargs)
+    def histogram(self,x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.histogram(data=data, x=x, y=y, **kwargs)
+
+    def line(self,x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.line(data=data, x=x, y=y, **kwargs)
+    def scatter(self, x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.scatter(data=data, x=x, y=y, **kwargs)
+    def violin(self, x=None, y=None, **kwargs):
+        data= self.data.to_dict()
+        if x is None:
+          x="index"
+          data["index"]=self.data.index
+        if y is None:
+          y="values"
+          data["values"]=self.data.values
+        return px.violin(data=data, x=x, y=y, **kwargs)
+
 
 
 class GroupBy:
